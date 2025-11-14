@@ -1,0 +1,458 @@
+/*
+================================================================================
+ SCRIPT COMPLETO - LABORATÓRIO DE BANCO DE DADOS
+ TEMA: Acompanhamento de Doenças Crônicas
+ DATABASE: lbd
+================================================================================
+*/
+
+-- 0. CRIAÇÃO DO BANCO
+DROP DATABASE IF EXISTS lbd;
+CREATE DATABASE lbd;
+USE lbd;
+
+
+-- 1. CRIAÇÃO DOS USUÁRIOS DE ACESSO (NÃO-ROOT)
+-- Estes são os usuários que a APLICAÇÃO (backend) usará para se conectar.
+-- Apaga os usuários se eles já existirem (para o script rodar limpo)
+DROP USER IF EXISTS 'app_admin'@'localhost';
+DROP USER IF EXISTS 'app_medico'@'localhost';
+DROP USER IF EXISTS 'app_paciente'@'localhost';
+
+-- Cria os usuários
+CREATE USER 'app_admin'@'localhost' IDENTIFIED BY 'admin_pass123';
+CREATE USER 'app_medico'@'localhost' IDENTIFIED BY 'medico_pass123';
+CREATE USER 'app_paciente'@'localhost' IDENTIFIED BY 'paciente_pass123';
+
+-- -----------------------------------------------------------------------------
+-- 2. TABELAS DE AUTENTICAÇÃO E PERMISSÃO (REQUISITO OBRIGATÓRIO)
+-- -----------------------------------------------------------------------------
+
+-- Tabela de Grupos (Define os "níveis" de acesso)
+CREATE TABLE grupos_usuarios (
+    id_grupo INT PRIMARY KEY,
+    nome_grupo VARCHAR(50) NOT NULL UNIQUE COMMENT 'Ex: Administrador, Medico, Paciente'
+);
+
+-- Tabela Central de Usuários (Controla o login)
+CREATE TABLE usuarios (
+    id_usuario INT PRIMARY KEY, -- Usará função de ID customizada
+    login VARCHAR(100) NOT NULL UNIQUE COMMENT 'Pode ser o CPF, CRM ou um username',
+    senha VARCHAR(255) NOT NULL COMMENT 'Em um sistema real, armazene um HASH (ex: bcrypt)',
+    id_grupo INT NOT NULL,
+    id_perfil_paciente INT NULL UNIQUE COMMENT 'Link para a tabela paciente',
+    id_perfil_medico INT NULL UNIQUE COMMENT 'Link para a tabela medico',
+    id_perfil_admin INT NULL UNIQUE COMMENT 'Link para a tabela administrador',
+    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (id_grupo) REFERENCES grupos_usuarios(id_grupo)
+    -- As FKs para os perfis serão adicionadas após a criação das tabelas de perfil
+);
+
+-- -----------------------------------------------------------------------------
+-- 3. TABELA DE SEQUÊNCIA (REQUISITO: GERAÇÃO DE ID CUSTOMIZADA)
+-- -----------------------------------------------------------------------------
+
+-- Tabela para controlar nossos geradores de ID (substituindo AUTO_INCREMENT)
+CREATE TABLE sequencias (
+    nome_seq VARCHAR(50) PRIMARY KEY,
+    valor_seq BIGINT NOT NULL
+);
+
+-- -----------------------------------------------------------------------------
+-- 4. TABELAS DE PERFIL E DADOS (SCHEMA PRINCIPAL)
+-- -----------------------------------------------------------------------------
+
+-- Perfil do Paciente (NÃO TEM MAIS SENHA)
+-- O ID NÃO É AUTO_INCREMENT
+CREATE TABLE paciente (
+    id_paciente INT PRIMARY KEY, -- Usará função de ID customizada
+    nome VARCHAR(255) NOT NULL,
+    cpf VARCHAR(11) UNIQUE NOT NULL,
+    data_nascimento DATE,
+    telefone_celular VARCHAR(20),
+    email VARCHAR(255)
+);
+
+-- Perfil do Medico (NÃO TEM MAIS SENHA)
+-- Manteremos AUTO_INCREMENT aqui para justificar seu uso (ver documento)
+CREATE TABLE medico (
+    id_medico INT PRIMARY KEY AUTO_INCREMENT,
+    crm VARCHAR(20) UNIQUE NOT NULL,
+    nome VARCHAR(255) NOT NULL,
+    especialidade VARCHAR(100)
+);
+
+-- Perfil do Administrador (NÃO TEM MAIS SENHA)
+-- Manteremos AUTO_INCREMENT aqui
+CREATE TABLE administrador (
+    id_admin INT PRIMARY KEY AUTO_INCREMENT,
+    nome VARCHAR(255),
+    email_contato VARCHAR(255)
+);
+
+-- Adicionando as FKs de perfil na tabela USUARIOS (que não podiam ser criadas antes)
+ALTER TABLE usuarios 
+    ADD CONSTRAINT fk_perfil_paciente FOREIGN KEY (id_perfil_paciente) REFERENCES paciente(id_paciente) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_perfil_medico FOREIGN KEY (id_perfil_medico) REFERENCES medico(id_medico) ON DELETE CASCADE,
+    ADD CONSTRAINT fk_perfil_admin FOREIGN KEY (id_perfil_admin) REFERENCES administrador(id_admin) ON DELETE CASCADE;
+
+-- Tabelas restantes (com AUTO_INCREMENT justificado e ON DELETE CASCADE)
+CREATE TABLE doenca_cronica (
+    id_doenca INT PRIMARY KEY AUTO_INCREMENT,
+    nome_cientifico VARCHAR(255) UNIQUE NOT NULL,
+    nome_popular VARCHAR(255)
+);
+
+CREATE TABLE medicamento (
+    id_medicamento INT PRIMARY KEY AUTO_INCREMENT,
+    nome_comercial VARCHAR(255) NOT NULL,
+    principio_ativo VARCHAR(255)
+);
+
+CREATE TABLE acompanha (
+    id_medico INT,
+    id_paciente INT,
+    PRIMARY KEY (id_medico, id_paciente),
+    FOREIGN KEY (id_medico) REFERENCES medico(id_medico) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE prescricao (
+    id_prescricao INT PRIMARY KEY AUTO_INCREMENT,
+    id_medico INT,
+    id_paciente INT,
+    id_medicamento INT,
+    data_inicio DATE NOT NULL,
+    dosagem VARCHAR(50),
+    frequencia VARCHAR(50),
+    instrucoes_adicionais TEXT,
+    FOREIGN KEY (id_medico) REFERENCES medico(id_medico) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente) ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (id_medicamento) REFERENCES medicamento(id_medicamento) ON UPDATE CASCADE ON DELETE SET NULL
+);
+
+CREATE TABLE lembrete (
+    id_lembrete INT PRIMARY KEY AUTO_INCREMENT,
+    id_prescricao INT,
+    horario_programado DATETIME NOT NULL,
+    status VARCHAR(50) DEFAULT 'Pendente',
+    FOREIGN KEY (id_prescricao) REFERENCES prescricao(id_prescricao) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE medicao (
+    id_medicao INT PRIMARY KEY AUTO_INCREMENT,
+    id_paciente INT,
+    data_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    observacoes TEXT,
+    FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE medicao_glicemia (
+    id_medicao INT PRIMARY KEY,
+    nivel_glicose DECIMAL(5, 2) NOT NULL,
+    periodo VARCHAR(50),
+    FOREIGN KEY (id_medicao) REFERENCES medicao(id_medicao) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE medicao_pressao (
+    id_medicao INT PRIMARY KEY,
+    pressao_sistolica DECIMAL(5, 2) NOT NULL,
+    pressao_diastolica DECIMAL(5, 2) NOT NULL,
+    FOREIGN KEY (id_medicao) REFERENCES medicao(id_medicao) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- -----------------------------------------------------------------------------
+-- 5. CRIAÇÃO DE ÍNDICES (REQUISITO: MÍNIMO 2)
+-- -----------------------------------------------------------------------------
+
+-- ÍNDICE 1: Para buscas rápidas de pacientes por nome.
+CREATE INDEX idx_paciente_nome ON paciente(nome);
+-- Justificativa: Médicos e administradores buscarão pacientes frequentemente pelo nome.
+-- Um índice B-Tree na coluna 'nome' acelera muito consultas com WHERE nome = '...' ou LIKE '...%'.
+
+-- ÍNDICE 2: Para buscas no histórico de prescrições do paciente.
+CREATE INDEX idx_prescricao_paciente_data ON prescricao(id_paciente, data_inicio DESC);
+-- Justificativa: É um índice composto. A consulta mais comum será ver o histórico
+-- de um paciente específico (id_paciente), ordenado pela data mais recente (data_inicio DESC).
+-- Este índice atende perfeitamente a essa consulta.
+
+-- -----------------------------------------------------------------------------
+-- 6. TABELA DE AUDITORIA (PARA O TRIGGER 1)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE auditoria_paciente (
+    id_auditoria INT PRIMARY KEY AUTO_INCREMENT,
+    id_paciente INT NOT NULL,
+    campo_alterado VARCHAR(50),
+    valor_antigo VARCHAR(255),
+    valor_novo VARCHAR(255),
+    alterado_por VARCHAR(100), -- Quem fez a mudança (usuário do SGBD)
+    data_alteracao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- -----------------------------------------------------------------------------
+-- 7. FUNÇÕES (REQUISITO: GERAÇÃO DE ID E MÍNIMO 2)
+-- -----------------------------------------------------------------------------
+
+-- Define o delimitador para poder criar funções/procedures
+DELIMITER $$
+
+-- FUNÇÃO 1: Geração de ID Customizada (REQUISITO)
+CREATE FUNCTION proximo_id(p_nome_seq VARCHAR(50))
+RETURNS BIGINT
+DETERMINISTIC
+MODIFIES SQL DATA
+BEGIN
+    -- Atualiza a sequência e armazena o novo valor
+    UPDATE sequencias SET valor_seq = LAST_INSERT_ID(valor_seq + 1) WHERE nome_seq = p_nome_seq;
+    -- Retorna o novo valor
+    RETURN LAST_INSERT_ID();
+END$$
+
+-- FUNÇÃO 2: Contar prescrições ativas de um paciente
+CREATE FUNCTION fn_contar_prescricoes_ativas(p_id_paciente INT)
+RETURNS INT
+READS SQL DATA
+BEGIN
+    DECLARE v_total INT;
+    
+    SELECT COUNT(*) INTO v_total
+    FROM prescricao
+    WHERE id_paciente = p_id_paciente
+      AND data_inicio <= CURDATE(); -- (Regra de "ativa" simplificada)
+      
+    RETURN v_total;
+END$$
+
+-- -----------------------------------------------------------------------------
+-- 8. TRIGGERS (REQUISITO: MÍNIMO 2)
+-- -----------------------------------------------------------------------------
+
+-- TRIGGER 1: Auditoria de mudança de dados do paciente
+CREATE TRIGGER trg_auditoria_paciente_update
+BEFORE UPDATE ON paciente
+FOR EACH ROW
+BEGIN
+    -- Se o email for alterado, registra na tabela de auditoria
+    IF OLD.email <> NEW.email THEN
+        INSERT INTO auditoria_paciente (id_paciente, campo_alterado, valor_antigo, valor_novo, alterado_por)
+        VALUES (OLD.id_paciente, 'email', OLD.email, NEW.email, CURRENT_USER());
+    END IF;
+    -- Se o telefone for alterado, registra também
+    IF OLD.telefone_celular <> NEW.telefone_celular THEN
+        INSERT INTO auditoria_paciente (id_paciente, campo_alterado, valor_antigo, valor_novo, alterado_por)
+        VALUES (OLD.id_paciente, 'telefone_celular', OLD.telefone_celular, NEW.telefone_celular, CURRENT_USER());
+    END IF;
+END$$
+
+-- TRIGGER 2: Validação de regra de negócio (data da prescrição)
+CREATE TRIGGER trg_validar_data_prescricao
+BEFORE INSERT ON prescricao
+FOR EACH ROW
+BEGIN
+    -- Regra de negócio: Não permitir criar prescrições com data de início no passado.
+    IF NEW.data_inicio < CURDATE() THEN
+        SIGNAL SQLSTATE '45000' -- "Unmapped user-defined exception"
+        SET MESSAGE_TEXT = 'Não é permitido criar prescrições com data de início retroativa.';
+    END IF;
+END$$
+
+-- -----------------------------------------------------------------------------
+-- 9. VIEWS (REQUISITO: MÍNIMO 2)
+-- -----------------------------------------------------------------------------
+
+-- VIEW 1: Facilita ver qual médico cuida de qual paciente
+CREATE VIEW vw_medico_paciente AS
+SELECT
+    m.nome AS nome_medico,
+    m.especialidade,
+    p.nome AS nome_paciente,
+    p.cpf AS cpf_paciente,
+    p.email AS email_paciente
+FROM acompanha a
+JOIN medico m ON a.id_medico = m.id_medico
+JOIN paciente p ON a.id_paciente = p.id_paciente;
+-- Justificativa: Abstrai a complexidade da tabela 'acompanha' e dos JOINs,
+-- fornecendo uma "tabela" virtual pronta para relatórios administrativos.
+
+-- VIEW 2: Facilita ver os lembretes pendentes de hoje
+CREATE VIEW vw_lembretes_hoje AS
+SELECT
+    p.nome AS nome_paciente,
+    p.telefone_celular,
+    m.nome_comercial AS medicamento,
+    pr.dosagem,
+    TIME(l.horario_programado) AS horario
+FROM lembrete l
+JOIN prescricao pr ON l.id_prescricao = pr.id_prescricao
+JOIN paciente p ON pr.id_paciente = p.id_paciente
+JOIN medicamento m ON pr.id_medicamento = m.id_medicamento
+WHERE l.status = 'Pendente'
+  AND DATE(l.horario_programado) = CURDATE();
+-- Justificativa: Essencial para a aplicação. Filtra e junta 4 tabelas
+-- para criar a lista de "Lembretes de Hoje", que pode ser usada
+-- pela API para enviar notificações ou exibir em um dashboard.
+
+-- -----------------------------------------------------------------------------
+-- 10. PROCEDURES (REQUISITO: MÍNIMO 2)
+-- -----------------------------------------------------------------------------
+
+-- PROCEDURE 1: Registrar medição de glicemia (usando transação)
+CREATE PROCEDURE sp_registrar_medicao_glicemia(
+    IN p_id_paciente INT,
+    IN p_nivel_glicose DECIMAL(5, 2),
+    IN p_periodo VARCHAR(50),
+    IN p_observacoes TEXT
+)
+BEGIN
+    DECLARE v_id_medicao INT;
+    
+    -- Inicia a transação
+    START TRANSACTION;
+    
+    -- 1. Insere na tabela base 'medicao'
+    INSERT INTO medicao (id_paciente, data_hora, observacoes)
+    VALUES (p_id_paciente, CURRENT_TIMESTAMP, p_observacoes);
+    
+    -- Pega o ID da medição que acabou de ser criada
+    SET v_id_medicao = LAST_INSERT_ID();
+    
+    -- 2. Insere na tabela específica 'medicao_glicemia'
+    INSERT INTO medicao_glicemia (id_medicao, nivel_glicose, periodo)
+    VALUES (v_id_medicao, p_nivel_glicose, p_periodo);
+    
+    -- Se tudo deu certo, comita a transação
+    COMMIT;
+END$$
+
+-- PROCEDURE 2: Cadastro completo de um novo paciente
+-- (Cria o perfil, cria o usuário de login, e associa ao médico)
+CREATE PROCEDURE sp_registrar_novo_paciente(
+    IN p_nome VARCHAR(255),
+    IN p_cpf VARCHAR(11),
+    IN p_email VARCHAR(255),
+    IN p_data_nasc DATE,
+    IN p_celular VARCHAR(20),
+    IN p_senha VARCHAR(255),
+    IN p_id_medico_responsavel INT
+)
+BEGIN
+    DECLARE v_id_paciente INT;
+    DECLARE v_id_usuario INT;
+    
+    START TRANSACTION;
+    
+    -- 1. Gera e insere o ID do Paciente
+    SET v_id_paciente = proximo_id('seq_paciente');
+    INSERT INTO paciente (id_paciente, nome, cpf, data_nascimento, telefone_celular, email)
+    VALUES (v_id_paciente, p_nome, p_cpf, p_data_nasc, p_celular, p_email);
+    
+    -- 2. Gera e insere o ID do Usuário (Grupo '3' = Paciente)
+    SET v_id_usuario = proximo_id('seq_usuario');
+    INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_paciente)
+    VALUES (v_id_usuario, p_cpf, p_senha, 3, v_id_paciente); -- Login é o CPF
+    
+    -- 3. Associa o paciente ao médico
+    INSERT INTO acompanha (id_medico, id_paciente)
+    VALUES (p_id_medico_responsavel, v_id_paciente);
+    
+    COMMIT;
+END$$
+
+-- Reseta o delimitador
+DELIMITER ;
+
+-- -----------------------------------------------------------------------------
+-- 11. CONCESSÃO DE PERMISSÕES (GRANTs) (REQUISITO: SEM ROOT)
+-- -----------------------------------------------------------------------------
+
+-- O Administrador da aplicação pode fazer TUDO (CRUD em todas as tabelas)
+GRANT SELECT, INSERT, UPDATE, DELETE ON lbd.* TO 'app_admin'@'localhost';
+GRANT EXECUTE ON FUNCTION lbd.proximo_id TO 'app_admin'@'localhost';
+GRANT EXECUTE ON FUNCTION lbd.fn_contar_prescricoes_ativas TO 'app_admin'@'localhost';
+GRANT EXECUTE ON PROCEDURE lbd.sp_registrar_medicao_glicemia TO 'app_admin'@'localhost';
+GRANT EXECUTE ON PROCEDURE lbd.sp_registrar_novo_paciente TO 'app_admin'@'localhost';
+
+-- O Médico pode:
+-- LER/CRIAR/EDITAR Pacientes, Prescrições, Lembretes, Medicações
+-- LER Medicamentos e Doenças
+-- VER as views
+GRANT SELECT, INSERT, UPDATE ON lbd.paciente TO 'app_medico'@'localhost';
+GRANT SELECT, INSERT, UPDATE ON lbd.prescricao TO 'app_medico'@'localhost';
+GRANT SELECT, INSERT, UPDATE ON lbd.lembrete TO 'app_medico'@'localhost';
+GRANT SELECT, INSERT ON lbd.medicao TO 'app_medico'@'localhost';
+GRANT SELECT, INSERT ON lbd.medicao_glicemia TO 'app_medico'@'localhost';
+GRANT SELECT, INSERT ON lbd.medicao_pressao TO 'app_medico'@'localhost';
+GRANT SELECT, INSERT ON lbd.acompanha TO 'app_medico'@'localhost';
+GRANT SELECT ON lbd.medicamento TO 'app_medico'@'localhost';
+GRANT SELECT ON lbd.doenca_cronica TO 'app_medico'@'localhost';
+GRANT SELECT ON lbd.vw_medico_paciente TO 'app_medico'@'localhost';
+GRANT SELECT ON lbd.vw_lembretes_hoje TO 'app_medico'@'localhost';
+-- Pode EXECUTAR procedures e functions
+GRANT EXECUTE ON FUNCTION lbd.proximo_id TO 'app_medico'@'localhost';
+GRANT EXECUTE ON FUNCTION lbd.fn_contar_prescricoes_ativas TO 'app_medico'@'localhost';
+GRANT EXECUTE ON PROCEDURE lbd.sp_registrar_medicao_glicemia TO 'app_medico'@'localhost';
+GRANT EXECUTE ON PROCEDURE lbd.sp_registrar_novo_paciente TO 'app_medico'@'localhost';
+-- O médico NÃO PODE criar outro médico nem mexer nos usuários.
+
+-- O Paciente só pode:
+-- LER seus próprios dados (a API deve filtrar o WHERE id_paciente = ?)
+-- ATUALIZAR seus lembretes (marcar como 'Tomado')
+GRANT SELECT ON lbd.paciente TO 'app_paciente'@'localhost';
+GRANT SELECT ON lbd.prescricao TO 'app_paciente'@'localhost';
+GRANT SELECT, UPDATE ON lbd.lembrete TO 'app_paciente'@'localhost';
+GRANT SELECT ON lbd.medicao TO 'app_paciente'@'localhost';
+GRANT SELECT ON lbd.medicao_glicemia TO 'app_paciente'@'localhost';
+GRANT SELECT ON lbd.medicao_pressao TO 'app_paciente'@'localhost';
+GRANT SELECT ON lbd.medicamento TO 'app_paciente'@'localhost';
+GRANT SELECT ON lbd.vw_lembretes_hoje TO 'app_paciente'@'localhost';
+GRANT EXECUTE ON FUNCTION lbd.fn_contar_prescricoes_ativas TO 'app_paciente'@'localhost';
+-- O paciente NÃO PODE criar prescrições, nem ver outros pacientes.
+
+-- -----------------------------------------------------------------------------
+-- 12. INSERÇÃO DE DADOS INICIAIS
+-- -----------------------------------------------------------------------------
+
+-- Insere os Grupos de Usuários
+INSERT INTO grupos_usuarios (id_grupo, nome_grupo) VALUES
+(1, 'Administrador'),
+(2, 'Medico'),
+(3, 'Paciente');
+
+-- Insere as Sequências Iniciais
+INSERT INTO sequencias (nome_seq, valor_seq) VALUES
+('seq_usuario', 100),
+('seq_paciente', 1000);
+
+-- Insere um perfil de Admin
+INSERT INTO administrador (nome, email_contato) VALUES ('Admin Padrão', 'admin@sistema.com');
+SET @id_admin_perfil = LAST_INSERT_ID();
+
+-- Insere o Usuário Admin (login: 'admin', senha: 'admin123')
+SET @id_novo_usuario = proximo_id('seq_usuario');
+INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_admin)
+VALUES (@id_novo_usuario, 'admin', 'admin123', 1, @id_admin_perfil); -- (Lembrar de usar HASH na API)
+
+-- Insere dados de exemplo (opcional, mas bom para testar)
+INSERT INTO medico (crm, nome, especialidade) VALUES ('12345-SP', 'Dr. Roberto Alves', 'Cardiologia');
+SET @id_medico_roberto = LAST_INSERT_ID();
+SET @id_novo_usuario_med = proximo_id('seq_usuario');
+INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_medico)
+VALUES (@id_novo_usuario_med, '12345-SP', 'med123', 2, @id_medico_roberto); -- Login é o CRM
+
+-- Inserindo um paciente de exemplo usando o PROCEDURE
+CALL sp_registrar_novo_paciente(
+    'Carlos Santana', '11122233344', 'carlos@email.com', '1955-07-20', '11987654321', 
+    'pac123', -- senha
+    @id_medico_roberto -- id do médico responsável
+);
+
+-- Insere dados de lookup
+INSERT INTO doenca_cronica (nome_cientifico, nome_popular) VALUES
+('Hipertensão Arterial Sistêmica', 'Pressão Alta'),
+('Diabetes Mellitus Tipo 2', 'Diabetes');
+
+INSERT INTO medicamento (nome_comercial, principio_ativo) VALUES
+('Losartana 50mg', 'Losartana'),
+('Metformina 850mg', 'Cloridrato de Metformina');
