@@ -1,13 +1,11 @@
 package controller;
 
 import dao.MedicoDAO;
-import model.Prescricao;
+import model.Paciente; // Importação Adicionada
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,22 +19,25 @@ public class MedicoController {
     private MedicoDAO medicoDAO;
 
     /**
-     * REQUISITO: (Create) Médico chama a PROCEDURE 'sp_registrar_novo_paciente'
-     * (Inspirado em)
+     * REQUISITO: (Read) Endpoint para o médico logado ver SEUS pacientes.
+     */
+    @GetMapping("/{id}/pacientes")
+    public List<Map<String, Object>> getMeusPacientes(@PathVariable int id) {
+        return medicoDAO.getPacientesPorMedico(id);
+    }
+
+    /**
+     * REQUISITO: (Create) Endpoint para o médico registrar um NOVO paciente.
      */
     @PostMapping("/pacientes")
     public ResponseEntity<Map<String, Object>> criarPaciente(@RequestBody Map<String, String> dados) {
         Map<String, Object> resposta = new HashMap<>();
         try {
-            // O ID do médico que está criando o paciente vem no JSON
-            int idMedicoResponsavel = Integer.parseInt(dados.get("id_medico_responsavel"));
-            
-            // A API chama o DAO, que usa a conexão 'app_medico'
-            medicoDAO.criarPaciente(dados, idMedicoResponsavel);
+            medicoDAO.criarPacienteMedico(dados);
             resposta.put("sucesso", true);
-            resposta.put("mensagem", "Paciente criado e vinculado ao médico com sucesso!");
+            resposta.put("mensagem", "Paciente criado com sucesso!");
             return ResponseEntity.ok(resposta);
-            
+
         } catch (Exception e) {
             String mensagemErro = e.getMessage();
             if (mensagemErro.contains("Duplicate entry")) {
@@ -50,95 +51,39 @@ public class MedicoController {
             return ResponseEntity.badRequest().body(resposta);
         }
     }
-
+    
     /**
-     * REQUISITO: (Read) Médico lê seus pacientes da VIEW 'vw_medico_paciente'.
+     * NOVO: (Update) Médico atualiza um paciente.
      */
-    @GetMapping("/{idMedico}/pacientes")
-    public List<Map<String, Object>> getMeusPacientes(@PathVariable int idMedico) {
-        return medicoDAO.getMeusPacientes(idMedico);
+    @PutMapping("/pacientes/{id}")
+    public void atualizarPaciente(@PathVariable int id, @RequestBody Paciente paciente) {
+        medicoDAO.atualizarPaciente(id, paciente);
     }
 
     /**
-     * REQUISITO: (Create) Médico chama a PROCEDURE 'sp_registrar_medicao_glicemia'.
+     * NOVO: (Delete) Médico deleta um paciente.
+     */
+    @DeleteMapping("/pacientes/{id}")
+    public void deletarPaciente(@PathVariable int id) {
+        medicoDAO.deletarPaciente(id);
+    }
+
+
+    /**
+     * REQUISITO: (Create) Endpoint para o médico registrar uma medição de glicemia.
      */
     @PostMapping("/medicao/glicemia")
-    public ResponseEntity<Map<String, Object>> registrarGlicemia(@RequestBody Map<String, Object> dados) {
+    public ResponseEntity<Map<String, Object>> registrarGlicemia(@RequestBody Map<String, String> dados) {
         Map<String, Object> resposta = new HashMap<>();
         try {
-            int idPaciente = (Integer) dados.get("idPaciente");
-            double nivel = ((Number) dados.get("nivel")).doubleValue();
-            String periodo = (String) dados.get("periodo");
-            String obs = (String) dados.get("obs");
-            
-            medicoDAO.registrarGlicemia(idPaciente, nivel, periodo, obs);
+            medicoDAO.registrarGlicemia(dados);
             resposta.put("sucesso", true);
-            resposta.put("mensagem", "Medição de glicemia registrada!");
+            resposta.put("mensagem", "Medição de glicemia registrada com sucesso!");
             return ResponseEntity.ok(resposta);
+            
         } catch (Exception e) {
             resposta.put("sucesso", false);
             resposta.put("mensagem", "Erro ao registrar medição: " + e.getMessage());
-            return ResponseEntity.badRequest().body(resposta);
-        }
-    }
-
-    /**
-     * REQUISITO: (Create) Médico registra medição de pressão
-     * (Inspirado em)
-     */
-    @PostMapping("/medicao/pressao")
-    public ResponseEntity<Map<String, Object>> registrarPressao(@RequestBody Map<String, Object> dados) {
-        Map<String, Object> resposta = new HashMap<>();
-        try {
-            int idPaciente = (Integer) dados.get("idPaciente");
-            double sistolica = ((Number) dados.get("sistolica")).doubleValue();
-            double diastolica = ((Number) dados.get("diastolica")).doubleValue();
-            String obs = (String) dados.get("obs");
-
-            medicoDAO.registrarPressao(idPaciente, sistolica, diastolica, obs);
-            resposta.put("sucesso", true);
-            resposta.put("mensagem", "Medição de pressão registrada!");
-            return ResponseEntity.ok(resposta);
-        } catch (Exception e) {
-            resposta.put("sucesso", false);
-            resposta.put("mensagem", "Erro ao registrar medição: " + e.getMessage());
-            return ResponseEntity.badRequest().body(resposta);
-        }
-    }
-
-    /**
-     * REQUISITO: (Create) Médico cria prescrição e lembrete
-     * (Inspirado em)
-     */
-    @PostMapping("/prescricao")
-    public ResponseEntity<Map<String, Object>> criarPrescricao(@RequestBody Map<String, Object> dados) {
-        Map<String, Object> resposta = new HashMap<>();
-        try {
-            // 1. Popula o objeto Prescricao
-            Prescricao p = new Prescricao();
-            p.setId_medico((Integer) dados.get("id_medico"));
-            p.setId_paciente((Integer) dados.get("id_paciente"));
-            p.setId_medicamento((Integer) dados.get("id_medicamento"));
-            p.setDosagem((String) dados.get("dosagem"));
-            p.setFrequencia((String) dados.get("frequencia"));
-            
-            SimpleDateFormat formatadorData = new SimpleDateFormat("yyyy-MM-dd");
-            p.setData_inicio(formatadorData.parse((String) dados.get("data_inicio")));
-            
-            // 2. Popula o Lembrete
-            SimpleDateFormat formatadorHora = new SimpleDateFormat("HH:mm");
-            Date horarioLembrete = formatadorHora.parse((String) dados.get("horario_lembrete"));
-
-            // 3. Chama o DAO
-            medicoDAO.criarPrescricao(p, horarioLembrete);
-            resposta.put("sucesso", true);
-            resposta.put("mensagem", "Prescrição e lembrete criados!");
-            return ResponseEntity.ok(resposta);
-            
-        } catch (Exception e) {
-            resposta.put("sucesso", false);
-            resposta.put("mensagem", "Erro ao criar prescrição (verifique formatos AAAA-MM-DD e HH:mm): " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.badRequest().body(resposta);
         }
     }

@@ -18,7 +18,6 @@ model\DoencaCronica.class
 model\Administrador.class
 model\Lembrete.class
 dao\DiarioMongoDAO.class
-dao\MedicoDAO$PacienteRowMapper.class
 model\Prescricao.class
 dao\PacienteDAO.class
 lbd\LbdApiApplication.class

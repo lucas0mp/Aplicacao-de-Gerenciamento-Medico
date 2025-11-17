@@ -1,8 +1,8 @@
 package controller;
 
 import dao.AdminDAO;
-import model.Medico;
-import model.Paciente;
+import model.Medico; // Importação Adicionada
+import model.Paciente; // Importação Adicionada
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,7 +24,6 @@ public class AdminController {
 
     /**
      * REQUISITO: (Read) Admin lê TODOS os pacientes da VIEW 'vw_medico_paciente'.
-     * Inspirado em:
      */
     @GetMapping("/pacientes")
     public List<Map<String, Object>> getTodosPacientes() {
@@ -33,7 +32,6 @@ public class AdminController {
     
     /**
      * REQUISITO: (Create) Admin chama a PROCEDURE 'sp_registrar_novo_paciente'.
-     * Inspirado em:
      */
     @PostMapping("/pacientes")
     public ResponseEntity<Map<String, Object>> criarPaciente(@RequestBody Map<String, String> dados) {
@@ -60,17 +58,16 @@ public class AdminController {
     }
 
     /**
-     * (Update) Atualiza um paciente
-     * Inspirado em:
+     * NOVO: (Update) Atualiza um paciente
      */
     @PutMapping("/pacientes/{id}")
     public void atualizarPaciente(@PathVariable int id, @RequestBody Paciente paciente) {
+        // O AdminDAO já possui este método
         adminDAO.atualizarPaciente(id, paciente);
     }
 
     /**
      * (Delete) Deleta um paciente
-     * Inspirado em:
      */
     @DeleteMapping("/pacientes/{id}")
     public void deletarPaciente(@PathVariable int id) {
@@ -82,7 +79,6 @@ public class AdminController {
 
     /**
      * (Read) Lista todos os médicos.
-     * Inspirado em:
      */
     @GetMapping("/medicos")
     public List<Medico> getTodosMedicos() {
@@ -92,7 +88,6 @@ public class AdminController {
     /**
      * (Create) Cria um médico E seu usuário
      * REQUISITO: Chama a FUNÇÃO 'proximo_id'
-     * Inspirado em:
      */
     @PostMapping("/medicos")
     public ResponseEntity<Map<String, Object>> criarMedico(@RequestBody Map<String, String> dados) {
@@ -122,17 +117,16 @@ public class AdminController {
     }
 
     /**
-     * (Update) Atualiza um médico.
-     * Inspirado em:
+     * NOVO: (Update) Atualiza um médico.
      */
     @PutMapping("/medicos/{id}")
     public void atualizarMedico(@PathVariable int id, @RequestBody Medico medico) {
+        // O AdminDAO já possui este método
         adminDAO.atualizarMedico(id, medico);
     }
 
     /**
      * (Delete) Deleta um médico.
-     * Inspirado em:
      */
     @DeleteMapping("/medicos/{id}")
     public void deletarMedico(@PathVariable int id) {
