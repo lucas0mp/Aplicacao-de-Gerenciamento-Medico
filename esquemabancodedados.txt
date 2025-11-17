@@ -220,7 +220,8 @@ BEGIN
     SELECT COUNT(*) INTO v_total
     FROM prescricao
     WHERE id_paciente = p_id_paciente
-      AND data_inicio <= CURDATE(); -- (Regra de "ativa" simplificada)
+      AND data_inicio <= CURDATE(); 
+    -- (Regra de "ativa" simplificada)
       
     RETURN v_total;
 END$$
@@ -262,11 +263,17 @@ END$$
 -- 9. VIEWS (REQUISITO: MÍNIMO 2)
 -- -----------------------------------------------------------------------------
 
--- VIEW 1: Facilita ver qual médico cuida de qual paciente
+-- VIEW 1: Facilita ver qual médico cuida de qual paciente (VERSÃO CORRIGIDA)
+-- Precisamos dos IDs para a API e o frontend funcionarem corretamente.
+
+DROP VIEW IF EXISTS vw_medico_paciente; -- Apaga a view antiga, se existir
+
 CREATE VIEW vw_medico_paciente AS
 SELECT
+    m.id_medico,  -- ESSENCIAL para o filtro do Médico (WHERE id_medico = ?)
     m.nome AS nome_medico,
     m.especialidade,
+    p.id_paciente, -- ESSENCIAL para o frontend (ex: botão de excluir)
     p.nome AS nome_paciente,
     p.cpf AS cpf_paciente,
     p.email AS email_paciente
@@ -274,7 +281,8 @@ FROM acompanha a
 JOIN medico m ON a.id_medico = m.id_medico
 JOIN paciente p ON a.id_paciente = p.id_paciente;
 -- Justificativa: Abstrai a complexidade da tabela 'acompanha' e dos JOINs,
--- fornecendo uma "tabela" virtual pronta para relatórios administrativos.
+-- fornecendo uma "tabela" virtual pronta para relatórios administrativos e
+-- para a API filtrar os pacientes de um médico específico.
 
 -- VIEW 2: Facilita ver os lembretes pendentes de hoje
 CREATE VIEW vw_lembretes_hoje AS
@@ -345,13 +353,16 @@ BEGIN
     
     -- 1. Gera e insere o ID do Paciente
     SET v_id_paciente = proximo_id('seq_paciente');
+    
     INSERT INTO paciente (id_paciente, nome, cpf, data_nascimento, telefone_celular, email)
     VALUES (v_id_paciente, p_nome, p_cpf, p_data_nasc, p_celular, p_email);
     
     -- 2. Gera e insere o ID do Usuário (Grupo '3' = Paciente)
     SET v_id_usuario = proximo_id('seq_usuario');
+    
     INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_paciente)
-    VALUES (v_id_usuario, p_cpf, p_senha, 3, v_id_paciente); -- Login é o CPF
+    VALUES (v_id_usuario, p_cpf, p_senha, 3, v_id_paciente); 
+    -- Login é o CPF
     
     -- 3. Associa o paciente ao médico
     INSERT INTO acompanha (id_medico, id_paciente)
@@ -378,7 +389,8 @@ GRANT EXECUTE ON PROCEDURE lbd.sp_registrar_novo_paciente TO 'app_admin'@'localh
 -- LER/CRIAR/EDITAR Pacientes, Prescrições, Lembretes, Medicações
 -- LER Medicamentos e Doenças
 -- VER as views
-GRANT SELECT, INSERT, UPDATE ON lbd.paciente TO 'app_medico'@'localhost';
+-- ***** LINHA MODIFICADA *****
+GRANT SELECT, INSERT, UPDATE, DELETE ON lbd.paciente TO 'app_medico'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON lbd.prescricao TO 'app_medico'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON lbd.lembrete TO 'app_medico'@'localhost';
 GRANT SELECT, INSERT ON lbd.medicao TO 'app_medico'@'localhost';
@@ -432,18 +444,20 @@ SET @id_admin_perfil = LAST_INSERT_ID();
 -- Insere o Usuário Admin (login: 'admin', senha: 'admin123')
 SET @id_novo_usuario = proximo_id('seq_usuario');
 INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_admin)
-VALUES (@id_novo_usuario, 'admin', 'admin123', 1, @id_admin_perfil); -- (Lembrar de usar HASH na API)
+VALUES (@id_novo_usuario, 'admin', 'admin123', 1, @id_admin_perfil);
+-- (Lembrar de usar HASH na API)
 
 -- Insere dados de exemplo (opcional, mas bom para testar)
 INSERT INTO medico (crm, nome, especialidade) VALUES ('12345-SP', 'Dr. Roberto Alves', 'Cardiologia');
 SET @id_medico_roberto = LAST_INSERT_ID();
 SET @id_novo_usuario_med = proximo_id('seq_usuario');
 INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_medico)
-VALUES (@id_novo_usuario_med, '12345-SP', 'med123', 2, @id_medico_roberto); -- Login é o CRM
+VALUES (@id_novo_usuario_med, '12345-SP', 'med123', 2, @id_medico_roberto);
+-- Login é o CRM
 
 -- Inserindo um paciente de exemplo usando o PROCEDURE
 CALL sp_registrar_novo_paciente(
-    'Carlos Santana', '11122233344', 'carlos@email.com', '1955-07-20', '11987654321', 
+    'Carlos Santana', '111222333B4', 'carlos@email.com', '1955-07-20', '11987654321', 
     'pac123', -- senha
     @id_medico_roberto -- id do médico responsável
 );
