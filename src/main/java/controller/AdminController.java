@@ -1,13 +1,12 @@
 package controller;
 
 import dao.AdminDAO;
-import model.Medico; // Importação Adicionada
-import model.Paciente; // Importação Adicionada
+import model.Administrador;
+import model.Medico;
+import model.Paciente;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,17 +21,11 @@ public class AdminController {
 
     // --- ENDPOINTS DE PACIENTE (CRUD Completo) ---
 
-    /**
-     * REQUISITO: (Read) Admin lê TODOS os pacientes da VIEW 'vw_medico_paciente'.
-     */
     @GetMapping("/pacientes")
     public List<Map<String, Object>> getTodosPacientes() {
         return adminDAO.getTodosPacientes();
     }
     
-    /**
-     * REQUISITO: (Create) Admin chama a PROCEDURE 'sp_registrar_novo_paciente'.
-     */
     @PostMapping("/pacientes")
     public ResponseEntity<Map<String, Object>> criarPaciente(@RequestBody Map<String, String> dados) {
         Map<String, Object> resposta = new HashMap<>();
@@ -44,7 +37,6 @@ public class AdminController {
             
         } catch (Exception e) {
             String mensagemErro = e.getMessage();
-            // REQUISITO: Tratamento de erro do TRIGGER (CPF duplicado, data inválida, etc.)
             if (mensagemErro.contains("Duplicate entry")) {
                 resposta.put("mensagem", "Erro: O CPF ou Email informado já está cadastrado.");
             } else if (mensagemErro.contains("Formato de data inválido")) {
@@ -57,18 +49,11 @@ public class AdminController {
         }
     }
 
-    /**
-     * NOVO: (Update) Atualiza um paciente
-     */
     @PutMapping("/pacientes/{id}")
     public void atualizarPaciente(@PathVariable int id, @RequestBody Paciente paciente) {
-        // O AdminDAO já possui este método
         adminDAO.atualizarPaciente(id, paciente);
     }
 
-    /**
-     * (Delete) Deleta um paciente
-     */
     @DeleteMapping("/pacientes/{id}")
     public void deletarPaciente(@PathVariable int id) {
         adminDAO.deletarPaciente(id);
@@ -77,18 +62,11 @@ public class AdminController {
     
     // --- ENDPOINTS DE MÉDICO (CRUD Completo) ---
 
-    /**
-     * (Read) Lista todos os médicos.
-     */
     @GetMapping("/medicos")
     public List<Medico> getTodosMedicos() {
         return adminDAO.getTodosMedicos();
     }
 
-    /**
-     * (Create) Cria um médico E seu usuário
-     * REQUISITO: Chama a FUNÇÃO 'proximo_id'
-     */
     @PostMapping("/medicos")
     public ResponseEntity<Map<String, Object>> criarMedico(@RequestBody Map<String, String> dados) {
         Map<String, Object> resposta = new HashMap<>();
@@ -116,20 +94,67 @@ public class AdminController {
         }
     }
 
-    /**
-     * NOVO: (Update) Atualiza um médico.
-     */
     @PutMapping("/medicos/{id}")
     public void atualizarMedico(@PathVariable int id, @RequestBody Medico medico) {
-        // O AdminDAO já possui este método
         adminDAO.atualizarMedico(id, medico);
     }
 
-    /**
-     * (Delete) Deleta um médico.
-     */
     @DeleteMapping("/medicos/{id}")
     public void deletarMedico(@PathVariable int id) {
         adminDAO.deletarMedico(id);
+    }
+
+    // --- NOVO: ENDPOINTS DE ADMIN (CRUD - Sem Delete) ---
+
+    /**
+     * NOVO: (Read) Lista todos os administradores.
+     * Chamado por: app.js -> carregarAdminsAdmin()
+     */
+    @GetMapping("/admins")
+    public List<Administrador> getTodosAdmins() {
+        return adminDAO.getTodosAdmins();
+    }
+
+    /**
+     * NOVO: (Create) Cria um administrador.
+     * Chamado por: app.js -> form-novo-admin
+     */
+    @PostMapping("/admins")
+    public ResponseEntity<Map<String, Object>> criarAdmin(@RequestBody Map<String, String> dados) {
+        Map<String, Object> resposta = new HashMap<>();
+        try {
+            Administrador admin = new Administrador();
+            admin.setNome(dados.get("nome"));
+            String login = dados.get("login"); // O email/login
+            String senha = dados.get("senha");
+
+            adminDAO.criarAdmin(admin, login, senha);
+            resposta.put("sucesso", true);
+            resposta.put("mensagem", "Administrador criado com sucesso!");
+            return ResponseEntity.ok(resposta);
+
+        } catch (Exception e) {
+            String mensagemErro = e.getMessage();
+            if (mensagemErro.contains("Duplicate entry")) {
+                resposta.put("mensagem", "Erro: O Login (Email) informado já está cadastrado.");
+            } else {
+                resposta.put("mensagem", "Erro ao criar administrador: " + mensagemErro);
+            }
+            resposta.put("sucesso", false);
+            return ResponseEntity.badRequest().body(resposta);
+        }
+    }
+
+    /**
+     * NOVO: (Update) Atualiza um administrador.
+     * Chamado por: app.js -> btn-edit-admin
+     */
+    @PutMapping("/admins/{id}")
+    public void atualizarAdmin(@PathVariable int id, @RequestBody Map<String, String> dados) {
+        Administrador admin = new Administrador();
+        admin.setNome(dados.get("nome"));
+        String login = dados.get("login");
+        
+        adminDAO.atualizarAdmin(id, admin, login);
     }
 }

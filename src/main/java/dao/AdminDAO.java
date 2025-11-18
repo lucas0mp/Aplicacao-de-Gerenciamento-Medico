@@ -1,21 +1,22 @@
 package dao;
 
+import model.Administrador; // Importação Adicionada
 import model.Medico;
 import model.Paciente;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder; // Importe este
-import org.springframework.jdbc.support.KeyHolder; // Importe este
+import org.springframework.jdbc.core.RowMapper; // Importação Adicionada
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import javax.sql.DataSource;
 import java.sql.CallableStatement;
 import java.sql.Date;
-import java.sql.PreparedStatement; // Importe este
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement; // Importe este
+import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.List;
@@ -93,16 +94,10 @@ public class AdminDAO {
 
     /**
      * (CRUD - Create) Cria um MÉDICO e um USUÁRIO para ele.
-     * **** ESTE MÉTODO FOI CORRIGIDO ****
-     * Inspirado em:
      */
     public void criarMedico(Medico medico, String senha) {
-        // O Admin tem que fazer duas inserções:
-        
         // 1. Criar o perfil do Medico (tabela 'medico')
         String sqlMedico = "INSERT INTO medico (crm, nome, especialidade) VALUES (?, ?, ?)";
-        
-        // REQUISITO: Usar GeneratedKeyHolder para pegar o ID de forma segura
         KeyHolder keyHolder = new GeneratedKeyHolder();
         
         jdbcTemplate.update(connection -> {
@@ -125,7 +120,6 @@ public class AdminDAO {
 
     /**
      * (CRUD - Update) Atualiza um médico.
-     * Inspirado em:
      */
     public void atualizarMedico(int idMedico, Medico medico) {
         String sql = "UPDATE medico SET nome = ?, crm = ?, especialidade = ? WHERE id_medico = ?";
@@ -137,10 +131,74 @@ public class AdminDAO {
 
     /**
      * (CRUD - Delete) Deleta um médico.
-     * Inspirado em:
      */
     public void deletarMedico(int idMedico) {
         String sql = "DELETE FROM medico WHERE id_medico = ?";
         jdbcTemplate.update(sql, idMedico);
+    }
+
+    // --- NOVO: CRUD DE ADMINS (Funções do Admin) ---
+
+    /**
+     * NOVO: Mapeador para converter SQL em Objeto Administrador.
+     */
+    private static final class AdminRowMapper implements RowMapper<Administrador> {
+        @Override
+        public Administrador mapRow(ResultSet rs, int rowNum) throws SQLException {
+            Administrador admin = new Administrador();
+            admin.setId_admin(rs.getInt("id_admin"));
+            admin.setNome(rs.getString("nome"));
+            admin.setEmail_contato(rs.getString("email_contato"));
+            // Puxa o login da tabela 'usuarios'
+            admin.setLogin(rs.getString("login")); 
+            return admin;
+        }
+    }
+
+    /**
+     * NOVO: (Read) Lista todos os administradores.
+     */
+    public List<Administrador> getTodosAdmins() {
+        // Junta 'administrador' com 'usuarios' para pegar o login
+        String sql = "SELECT a.*, u.login FROM administrador a " +
+                     "LEFT JOIN usuarios u ON a.id_admin = u.id_perfil_admin " +
+                     "WHERE u.id_grupo = 1"; // id_grupo = 1 é Administrador
+        return jdbcTemplate.query(sql, new AdminRowMapper());
+    }
+
+    /**
+     * NOVO: (Create) Cria um ADMIN e um USUÁRIO para ele.
+     */
+    public void criarAdmin(Administrador admin, String login, String senha) {
+        // 1. Criar o perfil do Admin (tabela 'administrador')
+        String sqlAdmin = "INSERT INTO administrador (nome, email_contato) VALUES (?, ?)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sqlAdmin, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, admin.getNome());
+            ps.setString(2, login); // Usando o login como email de contato
+            return ps;
+        }, keyHolder);
+        
+        // 2. Pegar o ID que acabou de ser criado
+        int idAdmin = keyHolder.getKey().intValue();
+        
+        // 3. Criar o Usuário de login (tabela 'usuarios')
+        // REQUISITO: Chama a Função 'proximo_id'
+        String sqlUsuario = "INSERT INTO usuarios (id_usuario, login, senha, id_grupo, id_perfil_admin) " +
+                            "VALUES (proximo_id('seq_usuario'), ?, ?, 1, ?)"; // id_grupo = 1
+        jdbcTemplate.update(sqlUsuario, login, senha, idAdmin);
+    }
+
+    /**
+     * NOVO: (Update) Atualiza um administrador.
+     */
+    public void atualizarAdmin(int idAdmin, Administrador admin, String login) {
+        String sql = "UPDATE administrador SET nome = ?, email_contato = ? WHERE id_admin = ?";
+        jdbcTemplate.update(sql, admin.getNome(), login, idAdmin);
+        
+        String sqlUser = "UPDATE usuarios SET login = ? WHERE id_perfil_admin = ?";
+        jdbcTemplate.update(sqlUser, login, idAdmin);
     }
 }

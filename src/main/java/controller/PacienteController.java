@@ -7,69 +7,52 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/paciente") // URL base para endpoints de paciente
+@RequestMapping("/api/paciente")
 @CrossOrigin(origins = "*")
 public class PacienteController {
 
     @Autowired
     private PacienteDAO pacienteDAO;
-    
+
     @Autowired
     private DiarioMongoDAO diarioMongoDAO;
 
-    /**
-     * REQUISITO: (Read) Paciente acessa a VIEW de lembretes.
-     * (Inspirado em)
-     */
-    @GetMapping("/{idPaciente}/lembretes")
-    public List<Map<String, Object>> getLembretes(@PathVariable int idPaciente) {
-        return pacienteDAO.getLembretes(idPaciente);
-    }
-    
-    /**
-     * REQUISITO: (Read) Paciente acessa seu histórico de medições.
-     * (Inspirado em)
-     */
-    @GetMapping("/{idPaciente}/medicoes")
-    public List<String> getMedicoes(@PathVariable int idPaciente) {
-        return pacienteDAO.getMedicoes(idPaciente);
+    @GetMapping("/{id}/lembretes")
+    public List<Map<String, Object>> getLembretes(@PathVariable int id) {
+        return pacienteDAO.getLembretesDoDia(id);
     }
 
-    /**
-     * REQUISITO: (Update) Paciente atualiza lembrete para 'Tomado'.
-     */
-    @PutMapping("/lembrete/{idLembrete}/tomar")
-    public ResponseEntity<Void> marcarComoTomado(@PathVariable int idLembrete) {
-        try {
-            pacienteDAO.marcarLembreteComoTomado(idLembrete);
-            return ResponseEntity.ok().build(); // Retorna 200 OK
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build(); // Retorna 400 Bad Request
-        }
+    @PutMapping("/lembrete/{id}/tomar")
+    public void marcarLembreteComoTomado(@PathVariable int id) {
+        pacienteDAO.marcarLembreteComoTomado(id);
     }
 
-    /**
-     * REQUISITO: (Create) Paciente salva no Banco NoSQL (MongoDB).
-     */
+    @GetMapping("/{id}/medicoes")
+    public List<String> getMedicoes(@PathVariable int id) {
+        return pacienteDAO.getHistoricoMedicoes(id);
+    }
+
+    // --- Endpoint de Prescrição REMOVIDO ---
+    // O app.js não chama mais este endpoint
+
+    // --- Endpoints do Diário (NoSQL) ---
+
     @PostMapping("/diario")
     public ResponseEntity<Map<String, Object>> salvarDiario(@RequestBody DiarioPaciente diario) {
         Map<String, Object> resposta = new HashMap<>();
         try {
-            diario.setData(new Date()); // Define a data atual no servidor
-            diarioMongoDAO.salvarDiario(diario);
+            diarioMongoDAO.salvarDiario(diario); // Nome do método corrigido
             resposta.put("sucesso", true);
-            resposta.put("mensagem", "Diário salvo no MongoDB!");
+            resposta.put("mensagem", "Entrada do diário salva com sucesso!");
             return ResponseEntity.ok(resposta);
         } catch (Exception e) {
             resposta.put("sucesso", false);
             resposta.put("mensagem", "Erro ao salvar no MongoDB: " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.badRequest().body(resposta);
         }
     }

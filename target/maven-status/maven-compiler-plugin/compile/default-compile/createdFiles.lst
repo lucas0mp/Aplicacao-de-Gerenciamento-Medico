@@ -7,9 +7,11 @@ controller\LoginController.class
 model\MedicaoGlicemia.class
 dao\AdminDAO$MedicoRowMapper.class
 controller\AdminController.class
+dao\AdminDAO$AdminRowMapper.class
 model\Medicao.class
 dao\LoginDAO.class
 model\MedicaoPressao.class
+dao\MedicoDAO$MedicamentoRowMapper.class
 model\Medico.class
 model\Paciente.class
 controller\PacienteController.class

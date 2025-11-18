@@ -3,18 +3,17 @@ package dao;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 import javax.sql.DataSource;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 @Repository
 public class PacienteDAO {
-    
-    // REQUISITO: Usa a conexão de Paciente (mínima permissão)
+
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -23,72 +22,58 @@ public class PacienteDAO {
     }
 
     /**
-     * REQUISITO: Lê da VIEW 'vw_lembretes_hoje'
-     * (Inspirado em `listarPorPaciente` do POO)
+     * REQUISITO: (Read) Paciente lê dados da VIEW 'vw_lembretes_hoje'.
      */
-    public List<Map<String, Object>> getLembretes(int idPaciente) {
-        // A VIEW já filtra por status='Pendente' e data=CURDATE()
+    public List<Map<String, Object>> getLembretesDoDia(int idPaciente) {
+        
+        // --- CORREÇÃO AQUI ---
+        // O nome da View correta é 'vw_lembretes_hoje'.
+        // Eu tinha escrito 'vw_lembretes_hoje_com_id' por engano na versão anterior.
         String sql = "SELECT * FROM vw_lembretes_hoje WHERE id_paciente = ?";
+        // ---------------------
+        
         return jdbcTemplate.queryForList(sql, idPaciente);
-    }
-    
-    /**
-     * REQUISITO: Lê da FUNCTION 'fn_contar_prescricoes_ativas'
-     */
-    public int contarPrescricoesAtivas(int idPaciente) {
-        String sql = "SELECT fn_contar_prescricoes_ativas(?)";
-        Integer total = jdbcTemplate.queryForObject(sql, Integer.class, idPaciente);
-        return (total != null) ? total : 0;
     }
 
     /**
-     * REQUISITO: Paciente pode atualizar o status de um lembrete (marcar como 'Tomado')
-     * A conexão 'app_paciente' tem permissão de UPDATE na tabela 'lembrete'.
+     * REQUISITO: (Update) Paciente atualiza o status de um lembrete.
      */
     public void marcarLembreteComoTomado(int idLembrete) {
+        // A View vw_lembretes_hoje (que corrigimos) agora fornece o id_lembrete
         String sql = "UPDATE lembrete SET status = 'Tomado' WHERE id_lembrete = ?";
         jdbcTemplate.update(sql, idLembrete);
     }
 
     /**
-     * Busca o histórico de medições (Glicemia e Pressão).
-     * (Inspirado em `listarMedicoesPorPaciente` do POO)
+     * REQUISITO: (Read) Paciente lê seu histórico de medições.
      */
-    public List<String> getMedicoes(int idPaciente) {
-        // REQUISITO: 'app_paciente' tem SELECT em 'medicao', 'medicao_glicemia', 'medicao_pressao'
-        String sql = "SELECT m.data_hora, m.observacoes, " +
-                     "mg.nivel_glicose, mg.periodo, " +
-                     "mp.pressao_sistolica, mp.pressao_diastolica " +
-                     "FROM medicao m " +
-                     "LEFT JOIN medicao_glicemia mg ON m.id_medicao = mg.id_medicao " +
-                     "LEFT JOIN medicao_pressao mp ON m.id_medicao = mp.id_medicao " +
-                     "WHERE m.id_paciente = ? " +
-                     "ORDER BY m.data_hora DESC LIMIT 10"; // Limita aos 10 mais recentes
-
-        // RowMapper para formatar a string do jeito que o POO fazia
-        RowMapper<String> mapper = (ResultSet rs, int rowNum) -> {
-            String tipo = "Tipo não identificado";
-            String valor = "";
-            
-            double glicose = rs.getDouble("nivel_glicose");
-            if (!rs.wasNull()) { 
-                tipo = "Glicemia";
-                valor = glicose + " mg/dL (Período: " + rs.getString("periodo") + ")";
-            } else {
-                double sistolica = rs.getDouble("pressao_sistolica");
-                if (!rs.wasNull()) { 
-                    tipo = "Pressão Arterial";
-                    valor = sistolica + " x " + rs.getDouble("pressao_diastolica");
-                }
-            }
-            
-            return String.format("Data: %s | Tipo: %s | Valor: %s | Obs: %s",
-                    rs.getTimestamp("data_hora").toString(),
-                    tipo,
-                    valor,
-                    rs.getString("observacoes"));
-        };
+    public List<String> getHistoricoMedicoes(int idPaciente) {
+        List<String> historico = new ArrayList<>();
         
-        return jdbcTemplate.query(sql, mapper, idPaciente);
+        // 1. Busca Glicemia
+        String sqlGlic = "SELECT m.data_hora, mg.nivel_glicose, mg.periodo " +
+                         "FROM medicao m JOIN medicao_glicemia mg ON m.id_medicao = mg.id_medicao " +
+                         "WHERE m.id_paciente = ? ORDER BY m.data_hora DESC";
+        
+        jdbcTemplate.query(sqlGlic, (ResultSet rs) -> {
+            String data = rs.getTimestamp("data_hora").toString();
+            String nivel = rs.getString("nivel_glicose");
+            String periodo = rs.getString("periodo");
+            historico.add(String.format("[%s] GLICEMIA: %s mg/dL (%s)", data, nivel, periodo));
+        }, idPaciente);
+
+        // 2. Busca Pressão
+        String sqlPres = "SELECT m.data_hora, mp.pressao_sistolica, mp.pressao_diastolica " +
+                         "FROM medicao m JOIN medicao_pressao mp ON m.id_medicao = mp.id_medicao " +
+                         "WHERE m.id_paciente = ? ORDER BY m.data_hora DESC";
+        
+        jdbcTemplate.query(sqlPres, (ResultSet rs) -> {
+            String data = rs.getTimestamp("data_hora").toString();
+            String sis = rs.getString("pressao_sistolica");
+            String dia = rs.getString("pressao_diastolica");
+            historico.add(String.format("[%s] PRESSÃO: %s / %s mmHg", data, sis, dia));
+        }, idPaciente);
+
+        return historico;
     }
 }
